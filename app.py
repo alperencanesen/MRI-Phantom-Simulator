@@ -319,7 +319,7 @@ with st.sidebar:
         r1_test = st.number_input("r1 (s⁻¹·mM⁻¹) — test", min_value=0.0, max_value=50.0, value=1.0, step=0.1)
         r2_test = st.number_input("r2 (s⁻¹·mM⁻¹) — test", min_value=0.0, max_value=50.0, value=1.2, step=0.1)
         st.subheader("Gd referansı")
-        gd_mM = st.number_input("Gd derişim (mM)", min_value=0.0, max_value=50.0, value=1.0, step=0.1)
+        gd_mM = st.number_input("Gd derişim (mM)", min_value=0.0, max_value=50.0, value=0.1, step=0.1)
         r1_gd = st.number_input("r1 (s⁻¹·mM⁻¹) — Gd", min_value=0.0, max_value=50.0, value=4.5, step=0.1)
         r2_gd = st.number_input("r2 (s⁻¹·mM⁻¹) — Gd", min_value=0.0, max_value=50.0, value=5.0, step=0.1)
 

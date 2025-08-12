@@ -41,7 +41,7 @@ except Exception:
 import streamlit as st
 
 # Sayfa ayarı en başta
-st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico by Alperen Can Esen", layout="wide")
+st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico by Alperen Can Esen", page_icon="app.ico", layout="wide")
 
 # ==============================
 # Sabitler (gerekirse düzenleyin)

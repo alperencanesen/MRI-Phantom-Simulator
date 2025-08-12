@@ -22,3 +22,4 @@ jobs:
           app-path: app.py
           ruff: false    # Ruff’ı kapattık
           install-deps: true
+          requirements-file: requirements.txt

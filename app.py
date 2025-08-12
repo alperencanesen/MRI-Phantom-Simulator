@@ -315,7 +315,7 @@ with st.sidebar:
         normalize = st.checkbox("Görüntüyü normalize et (0-1)", value=True)
     with col_b:
         st.subheader("Test molekül (SDF)")
-        stock_mM = st.number_input("Stok derişim (mM)", min_value=0.0, max_value=1000.0, value=5.0, step=0.1)
+        stock_mM = st.number_input("Stok derişim (mM)", min_value=0.0, max_value=1000.0, value=1.0, step=0.1)
         r1_test = st.number_input("r1 (s⁻¹·mM⁻¹) — test", min_value=0.0, max_value=50.0, value=1.0, step=0.1)
         r2_test = st.number_input("r2 (s⁻¹·mM⁻¹) — test", min_value=0.0, max_value=50.0, value=1.2, step=0.1)
         st.subheader("Gd referansı")

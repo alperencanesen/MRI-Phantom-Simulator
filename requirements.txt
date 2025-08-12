@@ -1,0 +1,10 @@
+# Core runtime dependencies for the MRI Phantom Simulator (Streamlit)
+streamlit
+numpy
+matplotlib
+pandas
+pillow
+
+# Optional: enable SDF parsing & molecule depiction with RDKit
+# (Uncomment to use; if build issues arise on some runners, keep it commented.)
+# rdkit-pypi

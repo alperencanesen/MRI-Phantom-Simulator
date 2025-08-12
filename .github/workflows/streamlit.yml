@@ -20,6 +20,6 @@ jobs:
       - uses: streamlit/streamlit-app-action@v0.0.3
         with:
           app-path: app.py
-          ruff: false    # Ruff’ı kapattık
+          ruff: false    # Ruff’ı kapattık 
           install-deps: true
           requirements-file: requirements.txt

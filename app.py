@@ -41,17 +41,17 @@ except Exception:
 import streamlit as st
 
 # Sayfa ayarı en başta
-st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico by Alperen Can Esen", page_icon="app.ico", layout="wide")
+st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico", layout="wide")
 
 # ==============================
 # Sabitler (gerekirse düzenleyin)
 # ==============================
-DEFAULT_T10_MS = 8900.0  # Saf su T1₀ (ms)
+DEFAULT_T10_MS = 4000.0  # Saf su T1₀ (ms)
 DEFAULT_T20_MS = 1160.0  # Saf su T2₀ (ms)
 DEFAULT_PD     = 1.0
 
 STOCK_MOLAR_M = 1.0      # Test molekülü stok derişim (mM)
-GD_MOLAR_M    = 0.1      # Gd referans derişimi (mM)
+GD_MOLAR_M    = 1.0      # Gd referans derişimi (mM)
 GD_R1         = 4.5      # [s^-1 mM^-1]
 GD_R2         = 5.0      # [s^-1 mM^-1]
 
@@ -89,45 +89,146 @@ LAYOUT = [
 # ------------------------------
 
 def parse_sdf(file_bytes: bytes) -> Dict[str, Optional[str]]:
-    info = {"title": None, "formula": None, "mw": None, "image": None, "mol": None, "props": {}}
-    if not RDKit_AVAILABLE:
-        try:
-            head = file_bytes.splitlines()[0].decode(errors="ignore").strip()
-            info["title"] = head if head else "(SDF yüklendi)"
-        except Exception:
-            info["title"] = "(SDF yüklendi)"
-        return info
+    """Robust SDF parser with detailed debug info.
+    Tries multiple RDKit paths (MolFromMolBlock, ForwardSDMolSupplier, SDMolSupplier)
+    and returns a debug dict so we can see *why* parsing fails in Streamlit.
+    """
+    info = {"title": None, "formula": None, "mw": None, "image": None,
+            "mol": None, "props": {}, "debug": {}, "sdf_text": None}
+
+    # Basic debug
+    info["debug"]["rdkit_available"] = bool(RDKit_AVAILABLE)
     try:
-        sdf_text = file_bytes.decode("utf-8", errors="ignore")
+        from rdkit import rdBase
+        info["debug"]["rdkit_version"] = rdBase.rdkitVersion
     except Exception:
-        sdf_text = None
+        info["debug"]["rdkit_version"] = None
+
+    info["debug"]["bytes_len"] = len(file_bytes) if file_bytes else 0
+
+    # Decode text (try utf-8 then latin-1)
+    sdf_text = None
+    for enc in ("utf-8", "latin-1"):
+        try:
+            sdf_text = file_bytes.decode(enc)
+            break
+        except Exception:
+            continue
+    info["sdf_text"] = sdf_text
+    info["debug"]["has_v3000"] = bool(sdf_text and "V3000" in sdf_text)
+    info["debug"]["has_delim"] = bool(sdf_text and "$$$$" in sdf_text)
+
+    # Header line as a fallback title
+    try:
+        head = file_bytes.splitlines()[0].decode(errors="ignore").strip()
+        info["title"] = head if head else "(SDF yüklendi)"
+    except Exception:
+        info["title"] = "(SDF yüklendi)"
+
+    attempts = []
+    def _rec(name: str, ok: bool, err: Optional[Exception] = None):
+        attempts.append({"name": name, "ok": bool(ok), "err": str(err) if err else None})
+
     mol = None
-    if sdf_text:
+    if RDKit_AVAILABLE and sdf_text:
+        # 1) Direct MolFromMolBlock (sanitize=True)
         try:
             mol = Chem.MolFromMolBlock(sdf_text, sanitize=True, removeHs=False)
-        except Exception:
-            mol = None
+            _rec("MolFromMolBlock(sanitize=True)", mol is not None)
+        except Exception as e:
+            _rec("MolFromMolBlock(sanitize=True)", False, e)
+
+        # 2) Try sanitize=False then sanitize later
+        if mol is None:
+            try:
+                mol_tmp = Chem.MolFromMolBlock(sdf_text, sanitize=False, removeHs=False)
+                if mol_tmp is not None:
+                    try:
+                        Chem.SanitizeMol(mol_tmp)
+                        mol = mol_tmp
+                        _rec("MolFromMolBlock(sanitize=False)+SanitizeMol", True)
+                    except Exception as e2:
+                        _rec("SanitizeMol", False, e2)
+                else:
+                    _rec("MolFromMolBlock(sanitize=False)", False)
+            except Exception as e:
+                _rec("MolFromMolBlock(sanitize=False)", False, e)
+
+        # 3) ForwardSDMolSupplier from in-memory text (handles multi-mol SDF)
+        if mol is None:
+            try:
+                from rdkit.Chem.rdmolfiles import ForwardSDMolSupplier
+                suppl = ForwardSDMolSupplier(io.StringIO(sdf_text))
+                count = 0
+                first_ok = None
+                for m in suppl:
+                    count += 1
+                    if m is not None and first_ok is None:
+                        mol = m
+                        first_ok = True
+                        break
+                _rec("ForwardSDMolSupplier(StringIO)", mol is not None)
+                info["debug"]["supplier_count_estimate"] = count
+            except Exception as e:
+                _rec("ForwardSDMolSupplier(StringIO)", False, e)
+
+        # 4) SDMolSupplier via temp file path (some RDKit builds prefer filenames)
+        if mol is None:
+            try:
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".sdf") as tmp:
+                    tmp.write(file_bytes)
+                    tmp.flush()
+                    tmp_path = tmp.name
+                try:
+                    suppl = Chem.SDMolSupplier(tmp_path, sanitize=True, removeHs=False)
+                    count = 0
+                    for m in suppl:
+                        if m is not None:
+                            mol = m
+                            break
+                        count += 1
+                    _rec("SDMolSupplier(tempfile, sanitize=True)", mol is not None)
+                    info["debug"]["sdmol_count_seen"] = count
+                finally:
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+            except Exception as e:
+                _rec("SDMolSupplier(tempfile)", False, e)
+
+        # 5) Split on $$$$ and try block-by-block
+        if mol is None and "$$$$" in (sdf_text or ""):
+            try:
+                blocks = [b for b in sdf_text.split("$$$$") if ("V2000" in b or "V3000" in b)]
+                for blk in blocks:
+                    m = Chem.MolFromMolBlock(blk, sanitize=True, removeHs=False)
+                    if m is not None:
+                        mol = m
+                        break
+                _rec("Split '$$$$'+MolFromMolBlock", mol is not None)
+            except Exception as e:
+                _rec("Split '$$$$'+MolFromMolBlock", False, e)
+
+    info["debug"]["attempts"] = attempts
+
     if mol is None:
-        try:
-            mol = Chem.MolFromMolBlock(file_bytes.decode(errors="ignore"))
-        except Exception:
-            mol = None
-    if mol is None:
-        try:
-            head = file_bytes.splitlines()[0].decode(errors="ignore").strip()
-            info["title"] = head if head else "(SDF yüklendi)"
-        except Exception:
-            info["title"] = "(SDF yüklendi)"
+        # RDKit yoksa veya hâlâ None ise: sadece temel başlık/durumları döndür.
         return info
+
+    # If we reach here, we have a molecule
     info["mol"] = mol
     try:
-        info["title"] = mol.GetProp("_Name") if mol.HasProp("_Name") else "(Molekül)"
+        info["title"] = mol.GetProp("_Name") if mol.HasProp("_Name") else (info.get("title") or "(Molekül)")
     except Exception:
-        info["title"] = "(Molekül)"
+        pass
+
     try:
         info["mw"] = f"{Descriptors.MolWt(mol):.2f}"
     except Exception:
         info["mw"] = None
+
     try:
         counts = {}
         for a in mol.GetAtoms():
@@ -138,14 +239,17 @@ def parse_sdf(file_bytes: bytes) -> Dict[str, Optional[str]]:
         info["formula"] = "".join(f"{el}{(n if n>1 else '')}" for el, n in sorted(counts.items(), key=lambda kv: key(kv[0])))
     except Exception:
         info["formula"] = None
+
     try:
         info["image"] = MolToImage(mol, size=(280, 220))
     except Exception:
         info["image"] = None
+
     try:
         info["props"] = {k.lower(): v for k, v in mol.GetPropsAsDict().items()}
     except Exception:
         info["props"] = {}
+
     return info
 
 # ------------------------------
@@ -329,7 +433,7 @@ def render_phantom(signals: Dict[str, float], size: Tuple[int, int] = (900, 1200
 # UI (yalın: SDF + TR/TE)
 # ==============================
 
-st.title("MRI Phantom Simulator (SDF) by Alperen Can Esen")
+st.title("MRI Phantom Simulator (SDF)")
 st.caption("Sadece SDF + TR/TE ver; r1/r2 otomatik kestirilsin. (Sezgisel/öğretici in‑silico model)")
 
 with st.sidebar:
@@ -342,6 +446,22 @@ with st.sidebar:
         sdf_bytes = sdf_file.read()
         mol_info = parse_sdf(sdf_bytes)
         st.success("SDF yüklendi.")
+        # DEBUG PANEL — SDF parse teşhisi
+        with st.expander("SDF Parse Debug", expanded=False):
+            st.caption(f"RDKit available: {RDKit_AVAILABLE}")
+            try:
+                from rdkit import rdBase
+                st.caption(f"RDKit version: {rdBase.rdkitVersion}")
+            except Exception:
+                pass
+            dbg = mol_info.get("debug", {})
+            st.write({k: dbg.get(k) for k in ["bytes_len","has_v3000","has_delim","attempts","supplier_count_estimate","sdmol_count_seen"] if k in dbg})
+            # İlk 200 karakteri göster, çok uzun olmasın
+            txt = mol_info.get("sdf_text")
+            if txt:
+                st.code((txt[:200] + ("…" if len(txt) > 200 else "")))
+            st.caption("Mol parsed: " + ("yes" if mol_info.get("mol") is not None else "no"))
+
         if mol_info.get("image") is not None:
             st.image(mol_info["image"], caption=mol_info.get("title") or "Molekül", use_column_width=True)
         else:

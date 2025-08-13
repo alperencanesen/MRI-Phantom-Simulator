@@ -41,17 +41,17 @@ except Exception:
 import streamlit as st
 
 # Sayfa ayarı en başta
-st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico", layout="wide")
+st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico by Alperen Can Esen", page_icon="app.ico", layout="wide")
 
 # ==============================
 # Sabitler (gerekirse düzenleyin)
 # ==============================
-DEFAULT_T10_MS = 4000.0  # Saf su T1₀ (ms)
+DEFAULT_T10_MS = 8900.0  # Saf su T1₀ (ms)
 DEFAULT_T20_MS = 1160.0  # Saf su T2₀ (ms)
 DEFAULT_PD     = 1.0
 
 STOCK_MOLAR_M = 1.0      # Test molekülü stok derişim (mM)
-GD_MOLAR_M    = 1.0      # Gd referans derişimi (mM)
+GD_MOLAR_M    = 0.1      # Gd referans derişimi (mM)
 GD_R1         = 4.5      # [s^-1 mM^-1]
 GD_R2         = 5.0      # [s^-1 mM^-1]
 
@@ -89,7 +89,7 @@ LAYOUT = [
 # ------------------------------
 
 def parse_sdf(file_bytes: bytes) -> Dict[str, Optional[str]]:
-    info = {"title": None, "formula": None, "mw": None, "image": None, "mol": None, "props": {}, "sdf_text": None}
+    info = {"title": None, "formula": None, "mw": None, "image": None, "mol": None, "props": {}}
     if not RDKit_AVAILABLE:
         try:
             head = file_bytes.splitlines()[0].decode(errors="ignore").strip()
@@ -101,7 +101,6 @@ def parse_sdf(file_bytes: bytes) -> Dict[str, Optional[str]]:
         sdf_text = file_bytes.decode("utf-8", errors="ignore")
     except Exception:
         sdf_text = None
-    info["sdf_text"] = sdf_text
     mol = None
     if sdf_text:
         try:
@@ -150,133 +149,6 @@ def parse_sdf(file_bytes: bytes) -> Dict[str, Optional[str]]:
     return info
 
 # ------------------------------
-# Basit SDF özellik çıkarıcı (RDKit yoksa)
-# ------------------------------
-
-PT_Z = {
-    'H':1,'He':2,'Li':3,'Be':4,'B':5,'C':6,'N':7,'O':8,'F':9,'Ne':10,
-    'Na':11,'Mg':12,'Al':13,'Si':14,'P':15,'S':16,'Cl':17,'Ar':18,'K':19,'Ca':20,
-    'Sc':21,'Ti':22,'V':23,'Cr':24,'Mn':25,'Fe':26,'Co':27,'Ni':28,'Cu':29,'Zn':30,
-    'Ga':31,'Ge':32,'As':33,'Se':34,'Br':35,'Kr':36,'Rb':37,'Sr':38,'Y':39,'Zr':40,
-    'Nb':41,'Mo':42,'Tc':43,'Ru':44,'Rh':45,'Pd':46,'Ag':47,'Cd':48,'In':49,'Sn':50,
-    'Sb':51,'Te':52,'I':53,'Xe':54,'Cs':55,'Ba':56,'La':57,'Ce':58,'Pr':59,'Nd':60,
-    'Pm':61,'Sm':62,'Eu':63,'Gd':64,'Tb':65,'Dy':66,'Ho':67,'Er':68,'Tm':69,'Yb':70,'Lu':71,
-    'Hf':72,'Ta':73,'W':74,'Re':75,'Os':76,'Ir':77,'Pt':78,'Au':79,'Hg':80,'Tl':81,'Pb':82,
-    'Bi':83,'Po':84,'At':85,'Rn':86,'Fr':87,'Ra':88,'Ac':89,'Th':90,'Pa':91,'U':92
-}
-
-def parse_sdf_basic_features(sdf_text: Optional[str]) -> Dict[str, float]:
-    # Varsayılan boş özellik seti
-    feats = {"radicals":0.0,"metal":0.0,"conj":0.0,"arom_frac":0.0,
-             "hetero":0.0,"rings":0.0,"charge":0.0,"heavy":0.0}
-    if not sdf_text:
-        return feats
-    lines = [ln.rstrip() for ln in sdf_text.splitlines()]
-    # Counts satırını bul (V2000)
-    counts_idx = None
-    for i,ln in enumerate(lines[:10]):
-        if ln.strip().endswith("V2000") and len(ln) >= 6:
-            counts_idx = i
-            break
-    if counts_idx is None:
-        # V3000 veya farklı ise minimum çıkarımlar: hetero/metaller property aramayla yok
-        return feats
-    try:
-        ln = lines[counts_idx]
-        nat = int(ln[0:3])
-        nbo = int(ln[3:6])
-    except Exception:
-        return feats
-    # Atom ve bağ kayıtlarını oku
-    atoms = []
-    for j in range(nat):
-        s = lines[counts_idx+1+j]
-        toks = s.split()
-        sym = toks[3] if len(toks) >= 4 else s[31:34].strip()
-        sym = sym.strip()
-        z = PT_Z.get(sym, 0)
-        atoms.append((sym, z))
-    bonds = []
-    for j in range(nbo):
-        s = lines[counts_idx+1+nat+j]
-        toks = s.split()
-        if len(toks) >= 3:
-            try:
-                a1 = int(toks[0]); a2 = int(toks[1]); btyp = int(toks[2]) if len(toks) > 2 else 1
-            except Exception:
-                continue
-            bonds.append((a1-1, a2-1, btyp))
-    # Bileşen sayısı (Union-Find)
-    parent = list(range(len(atoms)))
-    def find(x):
-        while parent[x]!=x:
-            parent[x]=parent[parent[x]]; x=parent[x]
-        return x
-    def union(a,b):
-        ra,rb = find(a),find(b)
-        if ra!=rb: parent[rb]=ra
-    for a1,a2,_ in bonds:
-        if 0<=a1<len(atoms) and 0<=a2<len(atoms):
-            union(a1,a2)
-    comps = len({find(i) for i in range(len(atoms))}) if atoms else 0
-    V = len(atoms); E = len(bonds)
-    rings = max(0, E - V + comps)  # siklomatik sayı ≈ halka sayısı
-
-    # Hetero, heavy, metal skoru
-    hetero = sum(1 for sym,z in atoms if z in (7,8,16))
-    heavy = sum(1 for sym,z in atoms if z > 1)
-    # metal skoru
-    atomic_nums = [z for _,z in atoms]
-    mscore = 0.0
-    for z in atomic_nums:
-        if z in TRANSITION_Z or z in LANTHANIDES_Z or z in ACTINIDES_Z:
-            mscore += METAL_WEIGHTS.get(z, DEFAULT_DF_WEIGHT)
-
-    # Konjugasyon ve aromatiklik yaklaşımı
-    conj_bonds = sum(1 for _,_,t in bonds if t in (2,4))
-    conj = (conj_bonds / max(1,E))
-    arom_atoms = set()
-    for a1,a2,t in bonds:
-        if t == 4:
-            arom_atoms.add(a1); arom_atoms.add(a2)
-    arom_frac = (len(arom_atoms) / max(1, heavy))
-
-    # Radikal ve yük (M  RAD / M  CHG satırlarından)
-    radicals = 0
-    charge = 0
-    for ln in lines:
-        if ln.startswith("M  RAD"):
-            toks = ln.split()
-            # format: M RAD n  idx1 rad1 idx2 rad2 ...
-            try:
-                pairs = toks[3:]
-                for k in range(0,len(pairs),2):
-                    rad = int(pairs[k+1])
-                    radicals += rad
-            except Exception:
-                pass
-        elif ln.startswith("M  CHG"):
-            toks = ln.split()
-            try:
-                pairs = toks[3:]
-                for k in range(0,len(pairs),2):
-                    ch = int(pairs[k+1])
-                    charge += abs(ch)
-            except Exception:
-                pass
-    feats.update({
-        "radicals": float(radicals),
-        "metal": float(mscore),
-        "conj": float(conj),
-        "arom_frac": float(arom_frac),
-        "hetero": float(hetero),
-        "rings": float(rings),
-        "charge": float(charge),
-        "heavy": float(heavy),
-    })
-    return feats
-
-# ------------------------------
 # In‑silico r1/r2 tahminleyici (heuristic)
 # ------------------------------
 TRANSITION_Z = set(range(21, 31)) | set(range(39, 49))
@@ -298,11 +170,11 @@ def metal_score(atomic_nums: List[int]) -> float:
     return score
 
 
-def feature_pack(mol, sdf_text: Optional[str]=None) -> Dict[str, float]:
+def feature_pack(mol) -> Dict[str, float]:
     """RDKit'ten kestirim için özellikleri çıkar."""
     if mol is None or not RDKit_AVAILABLE:
-        # RDKit yoksa SDF metninden temel öznitelikleri çıkar
-        return parse_sdf_basic_features(sdf_text)
+        return {"radicals": 0.0, "metal": 0.0, "conj": 0.0, "arom_frac": 0.0,
+                "hetero": 0.0, "rings": 0.0, "charge": 0.0, "heavy": 0.0}
     atoms = list(mol.GetAtoms())
     atomic_nums = [a.GetAtomicNum() for a in atoms]
     heavy = sum(1 for z in atomic_nums if z > 1)
@@ -325,7 +197,7 @@ def feature_pack(mol, sdf_text: Optional[str]=None) -> Dict[str, float]:
             "hetero": float(hetero), "rings": float(rings), "charge": float(charge), "heavy": float(heavy)}
 
 
-def estimate_relaxivity(mol, props: Dict[str, str], sdf_text: Optional[str]=None) -> Tuple[Relaxivity, Dict[str, float]]:
+def estimate_relaxivity(mol, props: Dict[str, str]) -> Tuple[Relaxivity, Dict[str, float]]:
     """SDF property'lerinde r1/r2 varsa doğrudan kullan; yoksa öznitelik skorundan tahmin."""
     # 1) SDF property override
     def _as_float(x):
@@ -341,7 +213,7 @@ def estimate_relaxivity(mol, props: Dict[str, str], sdf_text: Optional[str]=None
         return Relaxivity(r1=max(0.0, r1), r2=max(0.0, r2)), {"source": 1}
 
     # 2) Heuristic from features
-    f = feature_pack(mol, sdf_text)
+    f = feature_pack(mol)
     # para_score: ağırlıklı toplam
     para = 0.0
     para += 1.2 * f["radicals"]            # radikal e−
@@ -457,7 +329,7 @@ def render_phantom(signals: Dict[str, float], size: Tuple[int, int] = (900, 1200
 # UI (yalın: SDF + TR/TE)
 # ==============================
 
-st.title("MRI Phantom Simulator (SDF)")
+st.title("MRI Phantom Simulator (SDF) by Alperen Can Esen")
 st.caption("Sadece SDF + TR/TE ver; r1/r2 otomatik kestirilsin. (Sezgisel/öğretici in‑silico model)")
 
 with st.sidebar:
@@ -476,7 +348,7 @@ with st.sidebar:
             st.write(mol_info.get("title") or "Molekül")
             if mol_info.get("formula"): st.write(f"Formül: {mol_info['formula']}")
             if mol_info.get("mw"): st.write(f"Mol kütlesi: {mol_info['mw']} g/mol")
-        test_relax, est_info = estimate_relaxivity(mol_info.get("mol"), mol_info.get("props", {}), mol_info.get("sdf_text"))
+        test_relax, est_info = estimate_relaxivity(mol_info.get("mol"), mol_info.get("props", {}))
         st.markdown(f"**r1/r2 (otomatik):** `{test_relax.r1:.2f}` / `{test_relax.r2:.2f}` s⁻¹·mM⁻¹")
         if est_info.get("source") == 1:
             st.caption("SDF property bloklarından alındı (r1/r2 sağlandı).")

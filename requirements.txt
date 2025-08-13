@@ -1,5 +1,6 @@
-streamlit>=1.28
-numpy>=1.26
-pandas>=2.2
-matplotlib>=3.8
-pillow>=10
+streamlit
+numpy
+pandas
+matplotlib
+pillow
+rdkit

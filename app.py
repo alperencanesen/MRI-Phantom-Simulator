@@ -57,7 +57,7 @@ except Exception:
 import streamlit as st
 
 # Sayfa ayarı en başta
-st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico", layout="wide")
+st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico R.A. Alperen Can Esen", layout="wide")
 
 # ==============================
 # Sabitler (gerekirse düzenleyin)
@@ -449,7 +449,7 @@ def render_phantom(signals: Dict[str, float], size: Tuple[int, int] = (900, 1200
 # UI (yalın: SDF + TR/TE)
 # ==============================
 
-st.title("MRI Phantom Simulator (SDF)")
+st.title("MRI Phantom Simulator (SDF) by R.A. Alperen Can Esen")
 st.caption("Sadece SDF + TR/TE ver; r1/r2 otomatik kestirilsin. (Sezgisel/öğretici in‑silico model)")
 
 with st.sidebar:

@@ -397,10 +397,10 @@ def render_phantom(signals: Dict[str, float], size: Tuple[int, int] = (900, 1200
     h, w = size
     img = np.zeros((h, w), dtype=np.float32)
     rows, cols = 4, 2
-    pad_y, pad_x = 40, 40
+    pad_y, pad_x = 20, 20
     cell_h = (h - (rows + 1) * pad_y) // rows
     cell_w = (w - (cols + 1) * pad_x) // cols
-    radius = int(min(cell_h, cell_w) * 0.35)
+    radius = int(min(cell_h, cell_w) * 0.45)
     centers: Dict[str, Position] = {}
     masks: Dict[str, np.ndarray] = {}
     for idx, (label, _) in enumerate(LAYOUT):
@@ -506,7 +506,7 @@ if mode.startswith("TR"):
     if not TR_list:
         TR_list = [75,150,300,600,1200,2400,4800]
     TR_sel = st.sidebar.select_slider("Seçili TR (ms)", options=TR_list, value=TR_list[min(2, len(TR_list)-1)])
-    TE_fixed = st.sidebar.number_input("TE (ms)", 1.0, 1000.0, 80.0, 1.0)
+    TE_fixed = st.sidebar.number_input("TE (ms)", 1.0, 1000.0, 10.0, 1.0)
 else:
     TE_list_str = st.sidebar.text_input("TE listesi (ms)", value="10,20,40,80,120")
     TE_list = [float(x) for x in TE_list_str.replace(";", ",").split(",") if x.strip()]
@@ -572,7 +572,7 @@ with left:
     ax.imshow(img, cmap="gray", vmin=0.0, vmax=1.0)
     ax.axis("off")
     for label, (cy, cx) in centers.items():
-        ax.text(cx, cy, label, ha="center", va="center", fontsize=12, color="w")
+        ax.text(cx, cy, label, ha="center", va="center", fontsize=12, color="red")
     st.pyplot(fig, use_container_width=True)
 
     # T1/T2 tablosu (PNG'nin altında)
@@ -637,10 +637,10 @@ with left:
 with right:
     st.subheader("ROI & Parametre Özeti")
     df = pd.DataFrame(rows)
-    order = [lbl for lbl, _ in LAYOUT]
-    df["_ord"] = df["Phantom"].apply(lambda x: order.index(x) if x in order else 999)
+    custom_order = ["Gd", "1", "1/2", "1/4", "1/8", "1/16", "1/32", "Saf Su"]
+    rank = {lbl: i for i, lbl in enumerate(custom_order)}
+    df["_ord"] = df["Phantom"].map(rank).fillna(999).astype(int)
     df = df.sort_values("_ord").drop(columns=["_ord"]).reset_index(drop=True)
-    st.dataframe(df, use_container_width=True, hide_index=True)
 
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("ROI CSV indir", data=csv, file_name=f"roi_TR{int(TR_curr)}_TE{int(TE_curr)}.csv", mime="text/csv")

@@ -637,10 +637,10 @@ with left:
 with right:
     st.subheader("ROI & Parametre Özeti")
     df = pd.DataFrame(rows)
-    custom_order = ["Gd", "1", "1/2", "1/4", "1/8", "1/16", "1/32", "Saf Su"]
-    rank = {lbl: i for i, lbl in enumerate(custom_order)}
-    df["_ord"] = df["Phantom"].map(rank).fillna(999).astype(int)
+    order = [lbl for lbl, _ in LAYOUT]
+    df["_ord"] = df["Phantom"].apply(lambda x: order.index(x) if x in order else 999)
     df = df.sort_values("_ord").drop(columns=["_ord"]).reset_index(drop=True)
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("ROI CSV indir", data=csv, file_name=f"roi_TR{int(TR_curr)}_TE{int(TE_curr)}.csv", mime="text/csv")

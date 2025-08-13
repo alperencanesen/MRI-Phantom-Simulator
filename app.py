@@ -67,9 +67,9 @@ DEFAULT_T20_MS = 1160.0  # Saf su T2₀ (ms)
 DEFAULT_PD     = 1.0
 
 STOCK_MOLAR_M = 1.0      # Test molekülü stok derişim (mM)
-GD_MOLAR_M    = 1.0      # Gd referans derişimi (mM)
-GD_R1         = 4.5      # [s^-1 mM^-1]
-GD_R2         = 5.0      # [s^-1 mM^-1]
+GD_MOLAR_M    = 0.1      # Gd referans derişimi (mM)
+GD_R1         = 4.0      # [s^-1 mM^-1]
+GD_R2         = 4.8      # [s^-1 mM^-1]
 
 IMG_NOISE_SIGMA = 0.01   # Görsel gürültü
 NORMALIZE_IMAGE = True

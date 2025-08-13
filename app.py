@@ -30,11 +30,27 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # --- Optional RDKit support ---
+# RDKit_AVAILABLE yalnızca `rdkit.Chem` importuna göre belirlensin; Draw modülü (MolToImage)
+# bazı ortamlarda derli gelmediği için import hata verirse RDKit'i tamamen kapatmamalıyız.
+RDKit_AVAILABLE = False
+RDKit_DRAW_AVAILABLE = False
+Descriptors = None
+MolToImage = None
 try:
     from rdkit import Chem
-    from rdkit.Chem import Descriptors
-    from rdkit.Chem.Draw import MolToImage
     RDKit_AVAILABLE = True
+    try:
+        from rdkit.Chem import Descriptors as _Descriptors
+        Descriptors = _Descriptors
+    except Exception:
+        Descriptors = None
+    try:
+        from rdkit.Chem.Draw import MolToImage as _MolToImage
+        MolToImage = _MolToImage
+        RDKit_DRAW_AVAILABLE = True
+    except Exception:
+        MolToImage = None
+        RDKit_DRAW_AVAILABLE = False
 except Exception:
     RDKit_AVAILABLE = False
 

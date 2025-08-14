@@ -62,8 +62,8 @@ st.set_page_config(page_title="MRI Phantom Simulator (SDF) — Auto In‑Silico 
 # ==============================
 # Sabitler (gerekirse düzenleyin)
 # ==============================
-DEFAULT_T10_MS = 4000.0  # Saf su T1₀ (ms)
-DEFAULT_T20_MS = 1160.0  # Saf su T2₀ (ms)
+DEFAULT_T10_MS = 8900.0  # Saf su T1₀ (ms)
+DEFAULT_T20_MS = 1500.0  # Saf su T2₀ (ms)
 DEFAULT_PD     = 1.0
 
 STOCK_MOLAR_M = 1.0      # Test molekülü stok derişim (mM)
